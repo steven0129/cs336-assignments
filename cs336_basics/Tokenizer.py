@@ -1,6 +1,7 @@
 import regex as re
 import copy
 from collections import defaultdict
+from multiprocessing import Pool
 
 class Tokenizer:
     def __init__(self):
@@ -25,7 +26,7 @@ class Tokenizer:
         pretokenizers = self.__pretokenize(text, special_tokens)
         for pretokenizer in pretokenizers:
             for token in pretokenizer:
-                token = token.group().encode("utf-8")
+                token = token.encode("utf-8")
                 token2freq[tuple(bytes([b]) for b in token)] += 1
 
         while len(vocabs) < target_vocab_size:
@@ -56,7 +57,9 @@ class Tokenizer:
 
         special_tokens = [re.escape(token) for token in special_tokens]
         documents = re.split("|".join(special_tokens), text)
-        return map(lambda document: re.finditer(self.pattern, document), documents)
+        with Pool(8) as p:
+            documents = p.map(self.pretoken_single_doc, documents)
+        return documents
 
     def __merge_token(self, token, merge):
         merged_token = []
@@ -69,6 +72,9 @@ class Tokenizer:
                 merged_token.append(token[i])
                 i += 1
         return merged_token
+
+    def pretoken_single_doc(self, document):
+        return [m.group() for m in re.finditer(self.pattern, document)]
 
 if __name__ == "__main__":
     tokenizer = Tokenizer()
