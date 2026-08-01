@@ -33,29 +33,29 @@ class BPETrainer:
 
     def train(self, input_path, target_vocab_size, special_tokens) \
         -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-        F = open(input_path, "r", encoding="utf-8")
-        text = F.read()
-        token_counter = 0
-        tokenid2token = {}
-        token2tokenid = {}
-        tokenid2freq = defaultdict(int)
-        pretokenizers = self.__pretokenize(text, special_tokens)
+        with open(input_path, "r", encoding="utf-8") as F:
+            text = F.read()
+            token_counter = 0
+            tokenid2token = {}
+            token2tokenid = {}
+            tokenid2freq = defaultdict(int)
+            pretokenizers = self.__pretokenize(text, special_tokens)
 
-        for pretokenizer in pretokenizers:
-            for token in pretokenizer:
-                token = tuple(bytes([b]) for b in token)
-                if not token in token2tokenid:
-                    tokenid2token[token_counter] = token
-                    token2tokenid[token] = token_counter
-                    tokenid2freq[token_counter] = 1
-                    token_counter += 1
-                else:
-                    tokenid = token2tokenid[token]
-                    tokenid2freq[tokenid] += 1
+            for pretokenizer in pretokenizers:
+                for token in pretokenizer:
+                    token = tuple(bytes([b]) for b in token)
+                    if not token in token2tokenid:
+                        tokenid2token[token_counter] = token
+                        token2tokenid[token] = token_counter
+                        tokenid2freq[token_counter] = 1
+                        token_counter += 1
+                    else:
+                        tokenid = token2tokenid[token]
+                        tokenid2freq[tokenid] += 1
 
-        vocabs, merges = self.__merge(target_vocab_size, tokenid2token, tokenid2freq, special_tokens)
+            vocabs, merges = self.__merge(target_vocab_size, tokenid2token, tokenid2freq, special_tokens)
 
-        return vocabs, merges
+            return vocabs, merges
 
     @profile(enabled=False)
     def __pretokenize(self, text, special_tokens=None):
