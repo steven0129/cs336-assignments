@@ -35,14 +35,25 @@ class Tokenizer:
         -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
         F = open(input_path, "r", encoding="utf-8")
         text = F.read()
-        token2freq = defaultdict(int)
+        token_counter = 0
+        tokenid2token = {}
+        token2tokenid = {}
+        tokenid2freq = defaultdict(int)
         pretokenizers = self.__pretokenize(text, special_tokens)
 
         for pretokenizer in pretokenizers:
             for token in pretokenizer:
-                token2freq[tuple(bytes([b]) for b in token)] += 1
+                token = tuple(bytes([b]) for b in token)
+                if not token in token2tokenid:
+                    tokenid2token[token_counter] = token
+                    token2tokenid[token] = token_counter
+                    tokenid2freq[token_counter] = 1
+                    token_counter += 1
+                else:
+                    tokenid = token2tokenid[token]
+                    tokenid2freq[tokenid] += 1
 
-        vocabs, merges = self.__merge(target_vocab_size, token2freq, special_tokens)
+        vocabs, merges = self.__merge(target_vocab_size, tokenid2token, tokenid2freq, special_tokens)
 
         return vocabs, merges
 
@@ -58,34 +69,39 @@ class Tokenizer:
         return documents
 
     @profile(enabled=False)
-    def __merge(self, target_vocab_size, token2freq, special_tokens):
+    def __merge(self, target_vocab_size, tokenid2token, tokenid2freq, special_tokens):
         vocabs = {}
         merges = []
+        pair2tokenid = defaultdict(set)
+        pair2freq = defaultdict(int)
 
         for i in range(256):
             vocabs[i] = bytes([i])
         for i in range(256, len(special_tokens) + 256):
             vocabs[i] = special_tokens[i - 256].encode("utf-8")
 
+        for tokenid, token in tokenid2token.items():
+            for pair in zip(token, token[1:]):
+                pair2tokenid[pair].add(tokenid)
+                pair2freq[pair] += tokenid2freq[tokenid]
+
         while len(vocabs) < target_vocab_size:
-            pairs = defaultdict(int)
-            new_token2freq = defaultdict(int)
-
-            for byte_chr, freq in token2freq.items():
-                for pair in zip(byte_chr, byte_chr[1:]):
-                    pairs[pair] += freq
-
-            max_freq = max(pairs.values())
-            max_pairs = {pair: freq for pair, freq in pairs.items() if freq == max_freq}
+            max_freq = max(pair2freq.values())
+            max_pairs = {pair: freq for pair, freq in pair2freq.items() if freq == max_freq}
             current_merge = sorted(max_pairs, reverse=True)[0]
             merges.append(current_merge)
             vocabs[len(vocabs)] = current_merge[0] + current_merge[1]
-
-            for token, freq in token2freq.items():
-                merged_token = self.__merge_token(token, current_merge)
-                new_token2freq[tuple(merged_token)] += freq
-
-            token2freq = new_token2freq
+            tokenids = pair2tokenid[current_merge].copy()
+            for tokenid in tokenids:
+                old_token = tokenid2token[tokenid]
+                new_token = self.__merge_token(old_token, current_merge)
+                tokenid2token[tokenid] = new_token
+                for old_pair in zip(old_token, old_token[1:]):
+                    pair2tokenid[old_pair].discard(tokenid)
+                    pair2freq[old_pair] -= tokenid2freq[tokenid]
+                for new_pair in zip(new_token, new_token[1:]):
+                    pair2tokenid[new_pair].add(tokenid)
+                    pair2freq[new_pair] += tokenid2freq[tokenid]
 
         return vocabs, merges
 
@@ -99,7 +115,7 @@ class Tokenizer:
             else:
                 merged_token.append(token[i])
                 i += 1
-        return merged_token
+        return tuple(merged_token)
 
     def pretoken_single_doc(self, document):
         tokens = [m.group() for m in re.finditer(self.pattern, document)]
