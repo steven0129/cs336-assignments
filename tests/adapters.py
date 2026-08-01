@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
-from cs336_basics.Tokenizer import Tokenizer
+from cs336_basics.Tokenizer import BPETrainer
 
 import numpy.typing as npt
 import torch
@@ -590,5 +590,5 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    tokenizer = Tokenizer()
-    return tokenizer.train(input_path, vocab_size, special_tokens)
+    bpe_trainer = BPETrainer()
+    return bpe_trainer.train(input_path, vocab_size, special_tokens)

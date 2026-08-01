@@ -27,7 +27,7 @@ def profile(enabled=False):
         return wrapper
     return decorator
 
-class Tokenizer:
+class BPETrainer:
     def __init__(self):
         self.pattern = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
@@ -124,9 +124,8 @@ class Tokenizer:
 
 
 if __name__ == "__main__":
-    profiler = cProfile.Profile()
-    tokenizer = Tokenizer()
-    vocabs, merges = tokenizer.train("test.txt", 258, ["<|endoftext|>"])
+    bpe_trainer = BPETrainer()
+    vocabs, merges = bpe_trainer.train("test.txt", 258, ["<|endoftext|>"])
 
     print(vocabs)
     print(merges)
