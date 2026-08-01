@@ -162,7 +162,7 @@ class Tokenizer:
     @profile(enabled=False)
     def __pretokenize(self, text, special_tokens=None):
         if special_tokens is None:
-            return [re.finditer(self.pattern, text)]
+            return [self.pretoken_single_doc(text)]
 
         special_tokens = [re.escape(token) for token in special_tokens]
         documents = re.split("|".join(special_tokens), text)
