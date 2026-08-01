@@ -4,30 +4,68 @@ import cProfile
 from pstats import SortKey
 from collections import defaultdict
 from multiprocessing import Pool
+from functools import wraps
+
+
+def profile(enabled=False):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if not enabled:
+                return func(*args, **kwargs)
+
+            profiler = cProfile.Profile()
+            profiler.enable()
+            result = func(*args, **kwargs)
+            profiler.disable()
+            stats = pstats.Stats(profiler)
+            stats.strip_dirs()
+            stats.sort_stats(SortKey.CUMULATIVE)
+            stats.print_stats(30)
+            return result
+
+        return wrapper
+    return decorator
 
 class Tokenizer:
     def __init__(self):
         self.pattern = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
-
     def train(self, input_path, target_vocab_size, special_tokens) \
         -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
         F = open(input_path, "r", encoding="utf-8")
         text = F.read()
-        merges = []
-        
         token2freq = defaultdict(int)
+        pretokenizers = self.__pretokenize(text, special_tokens)
+
+        for pretokenizer in pretokenizers:
+            for token in pretokenizer:
+                token2freq[tuple(bytes([b]) for b in token)] += 1
+
+        vocabs, merges = self.__merge(target_vocab_size, token2freq, special_tokens)
+
+        return vocabs, merges
+
+    @profile(enabled=False)
+    def __pretokenize(self, text, special_tokens=None):
+        if special_tokens is None:
+            return [re.finditer(self.pattern, text)]
+
+        special_tokens = [re.escape(token) for token in special_tokens]
+        documents = re.split("|".join(special_tokens), text)
+        with Pool(8) as p:
+            documents = p.map(self.pretoken_single_doc, documents)
+        return documents
+
+    @profile(enabled=False)
+    def __merge(self, target_vocab_size, token2freq, special_tokens):
         vocabs = {}
+        merges = []
 
         for i in range(256):
             vocabs[i] = bytes([i])
         for i in range(256, len(special_tokens) + 256):
             vocabs[i] = special_tokens[i - 256].encode("utf-8")
-        
-        pretokenizers = self.__pretokenize(text, special_tokens)
-        for pretokenizer in pretokenizers:
-            for token in pretokenizer:
-                token2freq[tuple(bytes([b]) for b in token)] += 1
 
         while len(vocabs) < target_vocab_size:
             pairs = defaultdict(int)
@@ -51,16 +89,6 @@ class Tokenizer:
 
         return vocabs, merges
 
-    def __pretokenize(self, text, special_tokens=None):
-        if special_tokens is None:
-            return [re.finditer(self.pattern, text)]
-
-        special_tokens = [re.escape(token) for token in special_tokens]
-        documents = re.split("|".join(special_tokens), text)
-        with Pool(8) as p:
-            documents = p.map(self.pretoken_single_doc, documents)
-        return documents
-
     def __merge_token(self, token, merge):
         merged_token = []
         i = 0
@@ -82,15 +110,7 @@ class Tokenizer:
 if __name__ == "__main__":
     profiler = cProfile.Profile()
     tokenizer = Tokenizer()
-
-    profiler.enable()
     vocabs, merges = tokenizer.train("test.txt", 258, ["<|endoftext|>"])
-    profiler.disable()
-
-    stats = pstats.Stats(profiler)
-    stats.strip_dirs()
-    stats.sort_stats(SortKey.CUMULATIVE)
-    stats.print_stats(30)
 
     print(vocabs)
     print(merges)
