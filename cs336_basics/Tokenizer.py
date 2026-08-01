@@ -1,5 +1,7 @@
 import regex as re
-import copy
+import pstats
+import cProfile
+from pstats import SortKey
 from collections import defaultdict
 from multiprocessing import Pool
 
@@ -10,7 +12,6 @@ class Tokenizer:
 
     def train(self, input_path, target_vocab_size, special_tokens) \
         -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-        # TODO: Speedup BPE training
         F = open(input_path, "r", encoding="utf-8")
         text = F.read()
         merges = []
@@ -26,7 +27,6 @@ class Tokenizer:
         pretokenizers = self.__pretokenize(text, special_tokens)
         for pretokenizer in pretokenizers:
             for token in pretokenizer:
-                token = token.encode("utf-8")
                 token2freq[tuple(bytes([b]) for b in token)] += 1
 
         while len(vocabs) < target_vocab_size:
@@ -74,10 +74,23 @@ class Tokenizer:
         return merged_token
 
     def pretoken_single_doc(self, document):
-        return [m.group() for m in re.finditer(self.pattern, document)]
+        tokens = [m.group() for m in re.finditer(self.pattern, document)]
+        tokens = list(map(lambda token: token.encode("utf-8"), tokens))
+        return tokens
+
 
 if __name__ == "__main__":
+    profiler = cProfile.Profile()
     tokenizer = Tokenizer()
+
+    profiler.enable()
     vocabs, merges = tokenizer.train("test.txt", 258, ["<|endoftext|>"])
+    profiler.disable()
+
+    stats = pstats.Stats(profiler)
+    stats.strip_dirs()
+    stats.sort_stats(SortKey.CUMULATIVE)
+    stats.print_stats(30)
+
     print(vocabs)
     print(merges)
