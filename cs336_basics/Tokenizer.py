@@ -168,6 +168,7 @@ class Tokenizer:
             return [self.pretoken_single_doc(text)]
 
         special_tokens = [re.escape(token) for token in special_tokens]
+        special_tokens.sort(key=lambda x: len(x), reverse=True)
         documents = re.split("(" + "|".join(special_tokens) + ")", text)
         with Pool(8) as p:
             documents = p.map(self.pretoken_single_doc, documents)
