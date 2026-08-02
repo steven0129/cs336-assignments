@@ -156,6 +156,12 @@ class Tokenizer:
                     encoded_token.extend(list(map(lambda x : self.token2tokenid[x], token)))
         return encoded_token
 
+    def encode_iterable(self, iterable):
+        for text in iterable:
+            tokenids = self.encode(text)
+            for tokenid in tokenids:
+                yield tokenid
+
     def decode(self, token_ids):
         decoded_token = []
         for token_id in token_ids:
