@@ -138,39 +138,44 @@ class Tokenizer:
         pretokenizers = self.__pretokenize(text, self.special_tokens)
         for pretokenizer in pretokenizers:
             for token in pretokenizer:
-                token = list(bytes([b]) for b in token)
-                while True:
-                    current_merges = []
-                    for pair in zip(token, token[1:]):
-                        for idx, merge in enumerate(self.merges):
-                            if pair == merge:
-                                current_merges.append((idx, pair))
-                                break
-                    current_merges.sort(key=lambda x: x[0])
-                    if not current_merges:
-                        break
-                    token = self.__merge_token(token, current_merges[0][1])
-                encoded_token.extend(list(map(lambda x : self.token2tokenid[x], token)))
+                if self.special_tokens is not None and token.decode("utf-8") in self.special_tokens:
+                    encoded_token.append(self.token2tokenid[token])
+                else:
+                    token = list(bytes([b]) for b in token)
+                    while True:
+                        current_merges = []
+                        for pair in zip(token, token[1:]):
+                            for idx, merge in enumerate(self.merges):
+                                if pair == merge:
+                                    current_merges.append((idx, pair))
+                                    break
+                        current_merges.sort(key=lambda x: x[0])
+                        if not current_merges:
+                            break
+                        token = self.__merge_token(token, current_merges[0][1])
+                    encoded_token.extend(list(map(lambda x : self.token2tokenid[x], token)))
         return encoded_token
 
     def decode(self, token_ids):
         decoded_token = []
         for token_id in token_ids:
             decoded_token.append(self.vocabs[token_id])
-        return b"".join(decoded_token).decode("utf-8")
 
-    @profile(enabled=False)
+        return b"".join(decoded_token).decode("utf-8", errors="replace")
+
     def __pretokenize(self, text, special_tokens=None):
         if special_tokens is None:
             return [self.pretoken_single_doc(text)]
 
         special_tokens = [re.escape(token) for token in special_tokens]
-        documents = re.split("|".join(special_tokens), text)
+        documents = re.split("(" + "|".join(special_tokens) + ")", text)
         with Pool(8) as p:
             documents = p.map(self.pretoken_single_doc, documents)
         return documents
 
     def pretoken_single_doc(self, document):
+        if self.special_tokens is not None and document in self.special_tokens:
+            return [document.encode("utf-8")]
         tokens = [m.group() for m in re.finditer(self.pattern, document)]
         tokens = list(map(lambda token: token.encode("utf-8"), tokens))
         return tokens
