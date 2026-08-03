@@ -21,3 +21,18 @@ class Embedding(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.weight[x]
+
+class RMSNorm(nn.Module):
+    def __init__(self, d_model, eps=1e-5, device=None, dtype=None):
+        super(RMSNorm, self).__init__()
+        self.d_model = d_model
+        self.eps = eps
+        self.weight = nn.Parameter(torch.empty((d_model), device=device, dtype=dtype))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        in_dtype = x.dtype
+        x = x.to(torch.float32)
+        root_mean_square = (1 / self.d_model * einsum(x, x, "... seq_len d_in, ... seq_len d_in -> ... seq_len") + self.eps).sqrt()
+        x = x / root_mean_square.unsqueeze(-1)
+        x = einsum(x, self.weight, "... seq_len d_model, d_model -> ... seq_len d_model")
+        return x.to(in_dtype)
