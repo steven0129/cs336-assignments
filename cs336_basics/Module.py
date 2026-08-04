@@ -36,3 +36,18 @@ class RMSNorm(nn.Module):
         x = x / root_mean_square.unsqueeze(-1)
         x = einsum(x, self.weight, "... seq_len d_model, d_model -> ... seq_len d_model")
         return x.to(in_dtype)
+
+class SwiGLU(nn.Module):
+    def __init__(self, d_model, d_ff, device=None, dtype=None):
+        super(SwiGLU, self).__init__()
+        self.w1_weight = nn.Parameter(torch.empty((d_ff, d_model), device=device, dtype=dtype))
+        self.w2_weight = nn.Parameter(torch.empty((d_model, d_ff), device=device, dtype=dtype))
+        self.w3_weight = nn.Parameter(torch.empty((d_ff, d_model), device=device, dtype=dtype))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x1 = einsum(x, self.w1_weight, "... d_model, d_ff d_model -> ... d_ff")
+        x1 = x1 / (1 + torch.exp(-x1))
+        x3 = einsum(x, self.w3_weight, "... d_model, d_ff d_model -> ... d_ff")
+        x2 = einsum(x1, x3, "... d_ff, ... d_ff -> ... d_ff")
+        x2 = einsum(x2, self.w2_weight, "... d_ff, d_model d_ff -> ... d_model")
+        return x2
