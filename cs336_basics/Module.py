@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from einops import einsum
+from einops import einsum, rearrange
 
 
 class Linear(nn.Module):
@@ -51,3 +51,30 @@ class SwiGLU(nn.Module):
         x2 = einsum(x1, x3, "... d_ff, ... d_ff -> ... d_ff")
         x2 = einsum(x2, self.w2_weight, "... d_ff, d_model d_ff -> ... d_model")
         return x2
+
+class ROPE(nn.Module):
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None):
+        super(ROPE, self).__init__()
+        token_position = torch.linspace(0, max_seq_len - 1, steps=max_seq_len)  # The i-th position
+        pair_index = torch.arange(1, d_k // 2 + 1)
+
+        token_position = rearrange(token_position, "seq_len -> seq_len 1")
+        pair_index = rearrange(pair_index, "d_k -> 1 d_k")
+        angle = token_position / (theta ** ((2 * pair_index - 2) / d_k))
+        cos_table = angle.cos()  # (seq_len, d_k/2)
+        sin_table = angle.sin()  # (seq_len, d_k/2)
+        self.register_buffer("cos_table", cos_table, persistent=False)
+        self.register_buffer("sin_table", sin_table, persistent=False)
+
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        x = rearrange(x, "... seq_len (d_k_over_two two) -> ... seq_len d_k_over_two two", two=2)
+        cos_values = self.cos_table[token_positions]  # (seq_len, d_k/2)
+        sin_values = self.sin_table[token_positions]  # (seq_len, d_k/2)
+        new0 = x[..., 0] * cos_values - x[..., 1] * sin_values  # (seq_len, d_k/2)
+        new1 = x[..., 0] * sin_values + x[..., 1] * cos_values  # (seq_len, d_k/2)
+        x[..., 0], x[..., 1] = new0, new1
+        x = rearrange(x, "... seq_len d_k_over_two two -> ... seq_len (d_k_over_two two)")
+        return x
+
+        
