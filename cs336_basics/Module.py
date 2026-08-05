@@ -77,4 +77,13 @@ class ROPE(nn.Module):
         x = rearrange(x, "... seq_len d_k_over_two two -> ... seq_len (d_k_over_two two)")
         return x
 
-        
+class Softmax(nn.Module):
+    def __init__(self, dim=-1):
+        super(Softmax, self).__init__()
+        self.dim = dim
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x_max = x.max(self.dim, keepdim=True).values
+        x = x - x_max
+        exp_x = x.exp()
+        return exp_x / exp_x.sum(self.dim, keepdim=True)

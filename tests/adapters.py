@@ -4,7 +4,7 @@ import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 from cs336_basics.Tokenizer import BPETrainer, Tokenizer
-from cs336_basics.Module import Linear, Embedding, RMSNorm, SwiGLU, ROPE
+from cs336_basics.Module import Linear, Embedding, RMSNorm, SwiGLU, ROPE, Softmax
 
 import numpy.typing as npt
 import torch
@@ -437,7 +437,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    return Softmax(dim=dim)(in_features)
 
 
 def run_cross_entropy(
