@@ -4,7 +4,7 @@ import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 from cs336_basics.Tokenizer import BPETrainer, Tokenizer
-from cs336_basics.Module import Linear, Embedding, RMSNorm, SwiGLU, ROPE, Softmax
+from cs336_basics.Module import Linear, Embedding, RMSNorm, SwiGLU, ROPE, Softmax, ScaledDotProductAttention
 
 import numpy.typing as npt
 import torch
@@ -107,7 +107,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    return ScaledDotProductAttention()(Q, K, V, mask)
 
 
 def run_multihead_self_attention(

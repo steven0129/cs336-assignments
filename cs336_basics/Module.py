@@ -1,4 +1,5 @@
 import torch
+import math
 from torch import nn
 from einops import einsum, rearrange
 
@@ -87,3 +88,17 @@ class Softmax(nn.Module):
         x = x - x_max
         exp_x = x.exp()
         return exp_x / exp_x.sum(self.dim, keepdim=True)
+
+class ScaledDotProductAttention(nn.Module):
+    def __init__(self):
+        super(ScaledDotProductAttention, self).__init__()
+        self.softmax = Softmax(dim=-1)
+
+    def forward(self, Q, K, V, mask):
+        d_k = K.shape[-1]
+        QK = einsum(Q, K, "batch_size ... seq_len_q d_k, batch_size ... seq_len_k d_k -> batch_size ... seq_len_q seq_len_k")
+        QK /= math.sqrt(d_k)
+        QK[~mask] = -torch.inf
+        QK = self.softmax(QK)
+        QKV = einsum(QK, V, "batch_size ... seq_len_q seq_len_k, batch_size ... seq_len_k d_v -> batch_size ... seq_len_q d_v")
+        return QKV
