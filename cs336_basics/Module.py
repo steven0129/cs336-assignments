@@ -98,7 +98,30 @@ class ScaledDotProductAttention(nn.Module):
         d_k = K.shape[-1]
         QK = einsum(Q, K, "batch_size ... seq_len_q d_k, batch_size ... seq_len_k d_k -> batch_size ... seq_len_q seq_len_k")
         QK /= math.sqrt(d_k)
-        QK[~mask] = -torch.inf
+        QK = QK.masked_fill(~mask, -torch.inf)
         QK = self.softmax(QK)
         QKV = einsum(QK, V, "batch_size ... seq_len_q seq_len_k, batch_size ... seq_len_k d_v -> batch_size ... seq_len_q d_v")
         return QKV
+
+class CausalMultiHeadSelfAttention(nn.Module):
+    def __init__(self, d_model, num_heads):
+        super(CausalMultiHeadSelfAttention, self).__init__()
+        self.num_heads = num_heads
+        self.attn = ScaledDotProductAttention()
+        self.q_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
+        self.k_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
+        self.v_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
+        self.o_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
+
+    def forward(self, x):
+        Q = einsum(x, self.q_proj_weight, "... seq_len d_in, d_out d_in -> ... seq_len d_out")
+        K = einsum(x, self.k_proj_weight, "... seq_len d_in, d_out d_in -> ... seq_len d_out")
+        V = einsum(x, self.v_proj_weight, "... seq_len d_in, d_out d_in -> ... seq_len d_out")
+        Q = rearrange(Q, "... seq_len (num_heads d_heads) -> ... num_heads seq_len d_heads", num_heads=self.num_heads)
+        K = rearrange(K, "... seq_len (num_heads d_heads) -> ... num_heads seq_len d_heads", num_heads=self.num_heads)
+        V = rearrange(V, "... seq_len (num_heads d_heads) -> ... num_heads seq_len d_heads", num_heads=self.num_heads)
+        seq_len = Q.shape[-2]
+        mask = torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool).tril()
+        attn_output = rearrange(self.attn(Q, K, V, mask), "... num_heads seq_len d_heads -> ... seq_len (num_heads d_heads)", num_heads=self.num_heads)
+        attn_output = einsum(attn_output, self.o_proj_weight, "... seq_len d_in, d_out d_in -> ... seq_len d_out")
+        return attn_output
