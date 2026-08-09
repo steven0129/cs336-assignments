@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 from cs336_basics.Tokenizer import BPETrainer, Tokenizer
 from cs336_basics.Module import Linear, Embedding, RMSNorm, SwiGLU, ROPE, Softmax, ScaledDotProductAttention, CausalMultiHeadSelfAttention
+from cs336_basics.Module import TransformerBlock, TransformerLM
 
 import numpy.typing as npt
 import torch
@@ -82,9 +83,9 @@ def run_swiglu(
     """
     swiglu = SwiGLU(d_model, d_ff)
     swiglu.load_state_dict({
-        "w1_weight": w1_weight,
-        "w2_weight": w2_weight,
-        "w3_weight": w3_weight
+        "w1.weight": w1_weight,
+        "w2.weight": w2_weight,
+        "w3.weight": w3_weight
     })
     return swiglu(in_features)
 
@@ -143,10 +144,10 @@ def run_multihead_self_attention(
     """
     attn = CausalMultiHeadSelfAttention(d_model, num_heads)
     attn.load_state_dict({
-        "q_proj_weight": q_proj_weight,
-        "k_proj_weight": k_proj_weight,
-        "v_proj_weight": v_proj_weight,
-        "o_proj_weight": o_proj_weight,
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "output_proj.weight": o_proj_weight
     })
     result = attn(in_features)
     return result
@@ -195,10 +196,10 @@ def run_multihead_self_attention_with_rope(
     })
 
     attn.load_state_dict({
-        "q_proj_weight": q_proj_weight,
-        "k_proj_weight": k_proj_weight,
-        "v_proj_weight": v_proj_weight,
-        "o_proj_weight": o_proj_weight,
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "output_proj.weight": o_proj_weight,
     })
     result = attn(in_features)
     return result
@@ -297,7 +298,9 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    transformer_block = TransformerBlock(d_model, num_heads, d_ff, max_seq_len=max_seq_len, theta=theta)
+    transformer_block.load_state_dict(weights)
+    return transformer_block(in_features)
 
 
 def run_transformer_lm(
@@ -379,7 +382,19 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    transformer_lm = TransformerLM(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        num_layers=num_layers,
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        rope_theta=rope_theta,
+    )
+
+    transformer_lm.load_state_dict(weights)
+    transformer_lm.eval()
+    return transformer_lm(in_indices)
 
 
 def run_rmsnorm(

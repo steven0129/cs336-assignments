@@ -41,16 +41,19 @@ class RMSNorm(nn.Module):
 class SwiGLU(nn.Module):
     def __init__(self, d_model, d_ff, device=None, dtype=None):
         super(SwiGLU, self).__init__()
-        self.w1_weight = nn.Parameter(torch.empty((d_ff, d_model), device=device, dtype=dtype))
-        self.w2_weight = nn.Parameter(torch.empty((d_model, d_ff), device=device, dtype=dtype))
-        self.w3_weight = nn.Parameter(torch.empty((d_ff, d_model), device=device, dtype=dtype))
+        # self.w1_weight = nn.Parameter(torch.empty((d_ff, d_model), device=device, dtype=dtype))
+        # self.w2_weight = nn.Parameter(torch.empty((d_model, d_ff), device=device, dtype=dtype))
+        # self.w3_weight = nn.Parameter(torch.empty((d_ff, d_model), device=device, dtype=dtype))
+        self.w1 = Linear(d_model, d_ff)
+        self.w2 = Linear(d_ff, d_model)
+        self.w3 = Linear(d_model, d_ff)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x1 = einsum(x, self.w1_weight, "... d_model, d_ff d_model -> ... d_ff")
+        x1 = self.w1(x)
         x1 = x1 / (1 + torch.exp(-x1))
-        x3 = einsum(x, self.w3_weight, "... d_model, d_ff d_model -> ... d_ff")
+        x3 = self.w3(x)
         x2 = einsum(x1, x3, "... d_ff, ... d_ff -> ... d_ff")
-        x2 = einsum(x2, self.w2_weight, "... d_ff, d_model d_ff -> ... d_model")
+        x2 = self.w2(x2)
         return x2
 
 class ROPE(nn.Module):
@@ -108,10 +111,10 @@ class CausalMultiHeadSelfAttention(nn.Module):
         super(CausalMultiHeadSelfAttention, self).__init__()
         self.num_heads = num_heads
         self.attn = ScaledDotProductAttention()
-        self.q_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
-        self.k_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
-        self.v_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
-        self.o_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
+        self.q_proj = Linear(d_model, d_model)
+        self.k_proj = Linear(d_model, d_model)
+        self.v_proj = Linear(d_model, d_model)
+        self.output_proj = Linear(d_model, d_model)
         if positional_encoding is not None:
             self.pe = ROPE(
                 positional_encoding["theta"],
@@ -123,9 +126,9 @@ class CausalMultiHeadSelfAttention(nn.Module):
 
 
     def forward(self, x):
-        Q = einsum(x, self.q_proj_weight, "... seq_len d_in, d_out d_in -> ... seq_len d_out")
-        K = einsum(x, self.k_proj_weight, "... seq_len d_in, d_out d_in -> ... seq_len d_out")
-        V = einsum(x, self.v_proj_weight, "... seq_len d_in, d_out d_in -> ... seq_len d_out")
+        Q = self.q_proj(x)
+        K = self.k_proj(x)
+        V = self.v_proj(x)
         Q = rearrange(Q, "... seq_len (num_heads d_heads) -> ... num_heads seq_len d_heads", num_heads=self.num_heads)
         K = rearrange(K, "... seq_len (num_heads d_heads) -> ... num_heads seq_len d_heads", num_heads=self.num_heads)
         V = rearrange(V, "... seq_len (num_heads d_heads) -> ... num_heads seq_len d_heads", num_heads=self.num_heads)
@@ -135,5 +138,40 @@ class CausalMultiHeadSelfAttention(nn.Module):
             K = self.pe(K, torch.arange(seq_len))
         mask = torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool).tril()
         attn_output = rearrange(self.attn(Q, K, V, mask), "... num_heads seq_len d_heads -> ... seq_len (num_heads d_heads)", num_heads=self.num_heads)
-        attn_output = einsum(attn_output, self.o_proj_weight, "... seq_len d_in, d_out d_in -> ... seq_len d_out")
+        attn_output = self.output_proj(attn_output)
         return attn_output
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, d_model, num_heads, d_ff, theta=10000, max_seq_len=2048):
+        super(TransformerBlock, self).__init__()
+        self.attn = CausalMultiHeadSelfAttention(d_model, num_heads, {
+            "theta": theta,
+            "max_seq_len": max_seq_len
+        })
+        self.ffn = SwiGLU(d_model, d_ff)
+        self.ln1 = RMSNorm(d_model)
+        self.ln2 = RMSNorm(d_model)
+
+    def forward(self, x):
+        x = x + self.attn(self.ln1(x))
+        x = x + self.ffn(self.ln2(x))
+        return x
+
+class TransformerLM(nn.Module):
+    def __init__(self, vocab_size, context_length, num_layers, d_model, num_heads, d_ff, rope_theta=10000):
+        super(TransformerLM, self).__init__()
+        self.token_embeddings = Embedding(vocab_size, d_model)
+        self.layers = nn.ModuleList([
+            TransformerBlock(d_model, num_heads, d_ff, rope_theta, context_length) for _ in range(num_layers)
+        ])
+        self.ln_final = RMSNorm(d_model)
+        self.lm_head = Linear(d_model, vocab_size)
+
+    def forward(self, x):
+        x = self.token_embeddings(x)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.ln_final(x)
+        logits = self.lm_head(x)
+        return logits
