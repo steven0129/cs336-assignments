@@ -104,7 +104,7 @@ class ScaledDotProductAttention(nn.Module):
         return QKV
 
 class CausalMultiHeadSelfAttention(nn.Module):
-    def __init__(self, d_model, num_heads):
+    def __init__(self, d_model, num_heads, positional_encoding=None):
         super(CausalMultiHeadSelfAttention, self).__init__()
         self.num_heads = num_heads
         self.attn = ScaledDotProductAttention()
@@ -112,6 +112,15 @@ class CausalMultiHeadSelfAttention(nn.Module):
         self.k_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
         self.v_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
         self.o_proj_weight = nn.Parameter(torch.empty((d_model, d_model)))
+        if positional_encoding is not None:
+            self.pe = ROPE(
+                positional_encoding["theta"],
+                d_model / num_heads,
+                positional_encoding["max_seq_len"]
+            )
+        else:
+            self.pe = None
+
 
     def forward(self, x):
         Q = einsum(x, self.q_proj_weight, "... seq_len d_in, d_out d_in -> ... seq_len d_out")
@@ -121,6 +130,9 @@ class CausalMultiHeadSelfAttention(nn.Module):
         K = rearrange(K, "... seq_len (num_heads d_heads) -> ... num_heads seq_len d_heads", num_heads=self.num_heads)
         V = rearrange(V, "... seq_len (num_heads d_heads) -> ... num_heads seq_len d_heads", num_heads=self.num_heads)
         seq_len = Q.shape[-2]
+        if self.pe is not None:
+            Q = self.pe(Q, torch.arange(seq_len))
+            K = self.pe(K, torch.arange(seq_len))
         mask = torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool).tril()
         attn_output = rearrange(self.attn(Q, K, V, mask), "... num_heads seq_len d_heads -> ... seq_len (num_heads d_heads)", num_heads=self.num_heads)
         attn_output = einsum(attn_output, self.o_proj_weight, "... seq_len d_in, d_out d_in -> ... seq_len d_out")
