@@ -38,19 +38,25 @@ class RMSNorm(nn.Module):
         x = einsum(x, self.weight, "... seq_len d_model, d_model -> ... seq_len d_model")
         return x.to(in_dtype)
 
+class SiLU(nn.Module):
+    def __init__(self):
+        super(SiLU, self).__init__()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x / (1 + torch.exp(-x))
+
+
 class SwiGLU(nn.Module):
     def __init__(self, d_model, d_ff, device=None, dtype=None):
         super(SwiGLU, self).__init__()
-        # self.w1_weight = nn.Parameter(torch.empty((d_ff, d_model), device=device, dtype=dtype))
-        # self.w2_weight = nn.Parameter(torch.empty((d_model, d_ff), device=device, dtype=dtype))
-        # self.w3_weight = nn.Parameter(torch.empty((d_ff, d_model), device=device, dtype=dtype))
         self.w1 = Linear(d_model, d_ff)
         self.w2 = Linear(d_ff, d_model)
         self.w3 = Linear(d_model, d_ff)
+        self.silu_layer = SiLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x1 = self.w1(x)
-        x1 = x1 / (1 + torch.exp(-x1))
+        x1 = self.silu_layer(x1)
         x3 = self.w3(x)
         x2 = einsum(x1, x3, "... d_ff, ... d_ff -> ... d_ff")
         x2 = self.w2(x2)
