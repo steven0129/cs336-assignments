@@ -181,3 +181,13 @@ class TransformerLM(nn.Module):
         x = self.ln_final(x)
         logits = self.lm_head(x)
         return logits
+
+class CrossEntropyLoss(nn.Module):
+    def __init__(self):
+        super(CrossEntropyLoss, self).__init__()
+
+    def forward(self, x, targets):
+        target_logit = x[torch.arange(x.size(0)), targets]
+        max_values = x.max(-1).values
+        lse = max_values + (x - max_values.unsqueeze(-1)).exp().sum(-1).log()
+        return (-target_logit + lse).mean()

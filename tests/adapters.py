@@ -6,6 +6,7 @@ from typing import IO, Any, BinaryIO
 from cs336_basics.Tokenizer import BPETrainer, Tokenizer
 from cs336_basics.Module import Linear, Embedding, RMSNorm, SiLU, SwiGLU, ROPE, Softmax, ScaledDotProductAttention, CausalMultiHeadSelfAttention
 from cs336_basics.Module import TransformerBlock, TransformerLM
+from cs336_basics.Module import CrossEntropyLoss
 
 import numpy.typing as npt
 import torch
@@ -491,7 +492,8 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    cross_entropy_loss = CrossEntropyLoss()
+    return cross_entropy_loss(inputs, targets)
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
