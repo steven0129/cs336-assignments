@@ -5,6 +5,7 @@ from pstats import SortKey
 from collections import defaultdict
 from multiprocessing import Pool
 from functools import wraps
+from tqdm import tqdm
 
 
 def profile(enabled=False):
@@ -30,43 +31,56 @@ def profile(enabled=False):
 class BPETrainer:
     def __init__(self):
         self.pattern = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+        self.chunk_size = 100 * 1024 * 1024
 
     def train(self, input_path, target_vocab_size, special_tokens) \
         -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-        with open(input_path, "r", encoding="utf-8") as F:
-            text = F.read()
-            token_counter = 0
-            tokenid2token = {}
-            token2tokenid = {}
-            tokenid2freq = defaultdict(int)
-            pretokenizers = self.__pretokenize(text, special_tokens)
+        token_counter = 0
+        tokenid2token = {}
+        token2tokenid = {}
+        tokenid2freq = defaultdict(int)
 
-            for pretokenizer in pretokenizers:
-                for token in pretokenizer:
-                    token = tuple(bytes([b]) for b in token)
-                    if not token in token2tokenid:
-                        tokenid2token[token_counter] = token
-                        token2tokenid[token] = token_counter
-                        tokenid2freq[token_counter] = 1
-                        token_counter += 1
-                    else:
-                        tokenid = token2tokenid[token]
-                        tokenid2freq[tokenid] += 1
+        for pretokenizer in tqdm(self.__pretokenize(input_path, special_tokens)):
+            for token in pretokenizer:
+                token = tuple(bytes([b]) for b in token)
+                if not token in token2tokenid:
+                    tokenid2token[token_counter] = token
+                    token2tokenid[token] = token_counter
+                    tokenid2freq[token_counter] = 1
+                    token_counter += 1
+                else:
+                    tokenid = token2tokenid[token]
+                    tokenid2freq[tokenid] += 1
 
-            vocabs, merges = self.__merge(target_vocab_size, tokenid2token, tokenid2freq, special_tokens)
+        vocabs, merges = self.__merge(target_vocab_size, tokenid2token, tokenid2freq, special_tokens)
 
-            return vocabs, merges
+        return vocabs, merges
 
     @profile(enabled=False)
-    def __pretokenize(self, text, special_tokens=None):
+    def __pretokenize(self, input_path, special_tokens=None):
         if special_tokens is None:
-            return [re.finditer(self.pattern, text)]
+            with open(input_path, encoding="utf-8") as f:
+                yield self.pretoken_single_doc(f.read())
+            return
 
-        special_tokens = [re.escape(token) for token in special_tokens]
-        documents = re.split("|".join(special_tokens), text)
-        with Pool(8) as p:
-            documents = p.map(self.pretoken_single_doc, documents)
-        return documents
+        escaped_special_tokens = [re.escape(token) for token in special_tokens]
+        escaped_special_tokens.sort(key=len, reverse=True)
+        special_pattern = re.compile("|".join(escaped_special_tokens))
+
+        with open(input_path, encoding="utf-8") as F:
+            text = ""
+            while True:
+                chunk = F.read(self.chunk_size)
+                if chunk == "":
+                    break
+                text += chunk
+                if special_pattern.search(chunk):
+                    documents = special_pattern.split(text)
+                    for document in documents[:-1]:
+                        yield self.pretoken_single_doc(document)
+                    text = documents[-1]
+            if text != "":
+                yield self.pretoken_single_doc(text)
 
     @profile(enabled=False)
     def __merge(self, target_vocab_size, tokenid2token, tokenid2freq, special_tokens):
