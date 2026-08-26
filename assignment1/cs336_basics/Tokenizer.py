@@ -74,7 +74,7 @@ class BPETrainer:
                 if chunk == "":
                     break
                 text += chunk
-                if special_pattern.search(chunk):
+                if special_pattern.search(text):
                     documents = special_pattern.split(text)
                     for document in documents[:-1]:
                         yield self.pretoken_single_doc(document)
