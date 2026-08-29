@@ -405,7 +405,7 @@ def test_encode_iterable_tinystories_matches_tiktoken():
     reference_ids = reference_tokenizer.encode(corpus_contents, allowed_special={"<|endoftext|>"})
     all_ids = []
     with open(FIXTURES_PATH / "tinystories_sample.txt") as f:
-        for _id in tokenizer.encode_iterable(f):
+        for _id in tokenizer.encode_iterable(f, special_tokens=["<|endoftext|>"]):
             all_ids.append(_id)
     assert all_ids == reference_ids
 

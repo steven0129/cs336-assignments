@@ -142,6 +142,7 @@ class Tokenizer:
         self.vocabs = vocabs
         self.merges = merges
         self.special_tokens = special_tokens
+        self.chunk_size = 100 * 1024 * 1024
         self.pattern = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
         self.token2tokenid = {}
         for tokenid, token in self.vocabs.items():
@@ -170,11 +171,32 @@ class Tokenizer:
                     encoded_token.extend(list(map(lambda x : self.token2tokenid[x], token)))
         return encoded_token
 
-    def encode_iterable(self, iterable):
-        for text in iterable:
-            tokenids = self.encode(text)
-            for tokenid in tokenids:
-                yield tokenid
+    def encode_iterable(self, iterable, special_tokens=None):
+        special_tokens_set = set()
+        if special_tokens is not None:
+            special_tokens_set = set(list(map(lambda x: x.encode("utf-8"), special_tokens)))
+
+        for tokens in self.__pretokenize_with_iterable(iterable, special_tokens):
+            for token in tokens:
+                if token in special_tokens_set:
+                    yield self.token2tokenid[token]
+                    continue
+
+                token = list(bytes([b]) for b in token)
+                while True:
+                    current_merges = []
+                    for pair in zip(token, token[1:]):
+                        for idx, merge in enumerate(self.merges):
+                            if pair == merge:
+                                current_merges.append((idx, pair))
+                                break
+                    current_merges.sort(key=lambda x: x[0])
+                    if not current_merges:
+                        break
+                    token = self.__merge_token(token, current_merges[0][1])
+                    
+                for merged_token in token:
+                    yield self.token2tokenid[merged_token]
 
     def decode(self, token_ids):
         decoded_token = []
@@ -183,20 +205,56 @@ class Tokenizer:
 
         return b"".join(decoded_token).decode("utf-8", errors="replace")
 
+    def __pretokenize_with_iterable(self, iterable, special_tokens=None):
+        if special_tokens is None:
+            yield self.pretoken_single_doc(iterable.read())
+            return
+
+        text = ""
+        special_tokens_set = set(special_tokens)
+        escaped_special_tokens = [re.escape(token) for token in special_tokens]
+        escaped_special_tokens.sort(key=len, reverse=True)
+        special_pattern = re.compile(f"({'|'.join(escaped_special_tokens)})")
+
+        while True:
+            chunk = iterable.read(self.chunk_size)
+            if chunk == "":
+                break
+
+            text += chunk
+            documents = special_pattern.split(text)
+            for document in documents[:-1]:
+                if document in special_tokens_set:
+                    yield [document.encode('utf-8')]
+                else:
+                    yield self.pretoken_single_doc(document)
+
+            text = documents[-1]
+
+        if text != "":
+            yield self.pretoken_single_doc(text)
+
     def __pretokenize(self, text, special_tokens=None):
         if special_tokens is None:
             return [self.pretoken_single_doc(text)]
 
-        special_tokens = [re.escape(token) for token in special_tokens]
-        special_tokens.sort(key=lambda x: len(x), reverse=True)
-        documents = re.split("(" + "|".join(special_tokens) + ")", text)
-        with Pool(8) as p:
-            documents = p.map(self.pretoken_single_doc, documents)
-        return documents
+        results = []
+        special_tokens_set = set(special_tokens)
+        escaped_special_tokens = [re.escape(token) for token in special_tokens]
+        escaped_special_tokens.sort(key=len, reverse=True)
+        special_pattern = re.compile(f"({'|'.join(escaped_special_tokens)})")
+
+        documents = special_pattern.split(text)
+        for document in documents:
+            if not document in special_tokens_set:
+                results.append(self.pretoken_single_doc(document))
+            else:
+                results.append([document.encode('utf-8')])
+
+        return results
+
 
     def pretoken_single_doc(self, document):
-        if self.special_tokens is not None and document in self.special_tokens:
-            return [document.encode("utf-8")]
         tokens = [m.group() for m in re.finditer(self.pattern, document)]
         tokens = list(map(lambda token: token.encode("utf-8"), tokens))
         return tokens
