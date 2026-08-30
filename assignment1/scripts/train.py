@@ -77,3 +77,7 @@ if __name__ == '__main__':
             save_checkpoint(
                 model, optimizer, step, f'{args.log_dir}/model{step}.pt'
             )
+
+    save_checkpoint(
+        model, optimizer, step, f'{args.log_dir}/model_final.pt'
+    )
