@@ -8,13 +8,12 @@ from cs336_basics.Tokenizer import BPETrainer, Tokenizer
 
 
 RAW_TINYSTORIES_TXT = f"TinyStoriesV2-GPT4-train.txt"
-CONTEXT_LENGTH = 256
-BATCH_SIZE = 5
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset-path', default='dataset')
+    parser.add_argument('--context-length', default=256, type=int)
     args = parser.parse_args()
 
     if not os.path.isdir(args.dataset_path):
