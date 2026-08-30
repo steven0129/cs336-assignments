@@ -1,6 +1,7 @@
 import argparse
 import torch
 import numpy as np
+from cs336_basics.Module import AdamW, CrossEntropyLoss
 from cs336_basics.Module import TransformerLM
 from cs336_basics.Data import Loader
 
@@ -11,6 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset-path', default='dataset')
     parser.add_argument('--batch-size', default=5, type=int)
     parser.add_argument('--context-length', default=256, type=int)
+    parser.add_argument('--device', default='cuda')
     args = parser.parse_args()
 
     
@@ -24,7 +26,7 @@ if __name__ == '__main__':
         dataset=dataset,
         batch_size=args.batch_size,
         context_length=args.context_length,
-        device='cpu'
+        device=args.device
     )
 
     model = TransformerLM(
@@ -37,5 +39,30 @@ if __name__ == '__main__':
         rope_theta=10000
     )
 
-    x, y = next(data_loader.get_batch_iterable())
-    print(model(x))
+    model = model.to(args.device)
+    model.train()
+    loss_fn = CrossEntropyLoss()
+    optimizer = AdamW(
+        model.parameters(),
+        lr=3e-4,
+        weight_decay=0.01,
+        betas=(0.9, 0.95)
+    )
+
+    for step, (x, y) in enumerate(data_loader.get_batch_iterable()):
+        optimizer.zero_grad()
+
+        logits = model(x)  # (batch_size, context_length, vocab_size)
+        loss = loss_fn(
+            logits.reshape(-1, logits.size(-1)),
+            y.reshape(-1)
+        )
+
+        loss.backward()
+        optimizer.step()
+
+        if step % 10 == 0:
+            print(
+                f"step={step:6d} "
+                f"loss={loss.item():.4f} "
+            )
