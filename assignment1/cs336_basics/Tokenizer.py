@@ -140,11 +140,15 @@ class BPETrainer:
 class Tokenizer:
     def __init__(self, vocabs, merges, special_tokens=None):
         self.vocabs = vocabs
-        self.merges = merges
         self.special_tokens = special_tokens
         self.chunk_size = 100 * 1024 * 1024
         self.pattern = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
         self.token2tokenid = {}
+        self.merge2rank = {}
+
+        for rank, merge in enumerate(merges):
+            self.merge2rank[merge] = rank
+
         for tokenid, token in self.vocabs.items():
             self.token2tokenid[token] = tokenid
 
@@ -158,16 +162,27 @@ class Tokenizer:
                 else:
                     token = list(bytes([b]) for b in token)
                     while True:
-                        current_merges = []
-                        for pair in zip(token, token[1:]):
-                            for idx, merge in enumerate(self.merges):
-                                if pair == merge:
-                                    current_merges.append((idx, pair))
-                                    break
-                        current_merges.sort(key=lambda x: x[0])
-                        if not current_merges:
+                        current_merge = None
+                        for merge in zip(token, token[1:]):
+                            rank = self.merge2rank.get(merge, None)
+                            if rank is None:
+                                continue
+
+                            if current_merge is None:
+                                current_merge = {
+                                    "rank": rank,
+                                    "merge": merge
+                                }
+                            else:
+                                if rank < current_merge["rank"]:
+                                    current_merge = {
+                                        "rank": rank,
+                                        "merge": merge
+                                    }
+
+                        if current_merge is None:
                             break
-                        token = self.__merge_token(token, current_merges[0][1])
+                        token = self.__merge_token(token, current_merge["merge"])
                     encoded_token.extend(list(map(lambda x : self.token2tokenid[x], token)))
         return encoded_token
 
@@ -184,17 +199,28 @@ class Tokenizer:
 
                 token = list(bytes([b]) for b in token)
                 while True:
-                    current_merges = []
-                    for pair in zip(token, token[1:]):
-                        for idx, merge in enumerate(self.merges):
-                            if pair == merge:
-                                current_merges.append((idx, pair))
-                                break
-                    current_merges.sort(key=lambda x: x[0])
-                    if not current_merges:
+                    current_merge = None
+                    for merge in zip(token, token[1:]):
+                        rank = self.merge2rank.get(merge, None)
+                        if rank is None:
+                            continue
+
+                        if current_merge is None:
+                            current_merge = {
+                                "rank": rank,
+                                "merge": merge
+                            }
+                        else:
+                            if rank < current_merge["rank"]:
+                                current_merge = {
+                                    "rank": rank,
+                                    "merge": merge
+                                }
+
+                    if current_merge is None:
                         break
-                    token = self.__merge_token(token, current_merges[0][1])
-                    
+                    token = self.__merge_token(token, current_merge["merge"])
+
                 for merged_token in token:
                     yield self.token2tokenid[merged_token]
 
