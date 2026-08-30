@@ -63,6 +63,5 @@ if __name__ == '__main__':
 
         if step % 10 == 0:
             print(
-                f"step={step:6d} "
-                f"loss={loss.item():.4f} "
+                f"step={step:6d}/{len(data_loader)}, loss={loss.item():.4f}"
             )
