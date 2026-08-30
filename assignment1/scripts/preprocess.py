@@ -4,9 +4,7 @@ import pickle
 import numpy as np
 from tqdm import tqdm
 from huggingface_hub import hf_hub_download
-from cs336_basics.Module import TransformerLM
 from cs336_basics.Tokenizer import BPETrainer, Tokenizer
-from cs336_basics.Data import Loader
 
 
 RAW_TINYSTORIES_TXT = f"TinyStoriesV2-GPT4-train.txt"
@@ -15,7 +13,6 @@ BATCH_SIZE = 5
 
 
 if __name__ == '__main__':
-    data_loader = Loader()
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset-path', default='dataset')
     args = parser.parse_args()
@@ -56,8 +53,8 @@ if __name__ == '__main__':
     print(f"Vocabulary Size: {len(vocabs)}")
     bpe_tokenizer = Tokenizer(vocabs, merges, ["<|endoftext|>"])
 
-    if not os.path.isfile(f"{args.dataset_path}/{RAW_TINYSTORIES_TXT}.bin"):
-        print(f"Building {args.dataset_path}/{RAW_TINYSTORIES_TXT}.bin...")
+    if not os.path.isfile(f"{args.dataset_path}/{RAW_TINYSTORIES_TXT}.npy"):
+        print(f"Building {args.dataset_path}/{RAW_TINYSTORIES_TXT}.npy...")
         with open(f'{args.dataset_path}/{RAW_TINYSTORIES_TXT}') as F:
             counter = 0
             queue = []
@@ -67,13 +64,13 @@ if __name__ == '__main__':
                 queue.append(token_id)
                 if counter == 100 * 1024 * 1024:
                     queue = np.array(queue, dtype=np.uint16)
-                    with open(f"{args.dataset_path}/{RAW_TINYSTORIES_TXT}.bin", "ab") as F:
+                    with open(f"{args.dataset_path}/{RAW_TINYSTORIES_TXT}.npy", "ab") as F:
                         queue.tofile(F)
 
                     queue = []
                     counter = 0
 
             if queue:
-                with open(f"{args.dataset_path}/{RAW_TINYSTORIES_TXT}.bin", "ab") as F:
+                with open(f"{args.dataset_path}/{RAW_TINYSTORIES_TXT}.npy", "ab") as F:
                     queue = np.array(queue, dtype=np.uint16)
                     queue.tofile(F)
