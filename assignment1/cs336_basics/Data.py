@@ -3,23 +3,29 @@ import numpy as np
 
 
 class Loader():
-    def get_batch(self, dataset, batch_size, context_length, device):
-        starting_idxs = torch.randint(len(dataset) - context_length, (batch_size,))
+    def __init__(self, dataset, batch_size, context_length, device):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.context_length = context_length
+        self.device = device
+
+    def get_batch(self):
+        starting_idxs = torch.randint(len(self.dataset) - self.context_length, (self.batch_size,))
         x = torch.stack([
-            torch.from_numpy((dataset[i : i + context_length]).astype(np.int64))
+            torch.from_numpy((self.dataset[i : i + self.context_length]).astype(np.int64))
             for i in starting_idxs
         ])
 
         y = torch.stack(
             [
-                torch.from_numpy((dataset[i + 1 : i + 1 + context_length]).astype(np.int64))
+                torch.from_numpy((self.dataset[i + 1 : i + 1 + self.context_length]).astype(np.int64))
                 for i in starting_idxs
             ]
         )  # fmt: skip
-        if "cuda" in device:
-            x = x.pin_memory().to(device, non_blocking=True)
-            y = y.pin_memory().to(device, non_blocking=True)
+        if "cuda" in self.device:
+            x = x.pin_memory().to(self.device, non_blocking=True)
+            y = y.pin_memory().to(self.device, non_blocking=True)
         else:
-            x = x.to(device)
-            y = y.to(device)
+            x = x.to(self.device)
+            y = y.to(self.device)
         return x, y

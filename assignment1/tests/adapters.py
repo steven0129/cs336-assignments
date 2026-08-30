@@ -461,8 +461,8 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    loader = Loader()
-    return loader.get_batch(dataset, batch_size, context_length, device)
+    loader = Loader(dataset, batch_size, context_length, device)
+    return loader.get_batch()
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
