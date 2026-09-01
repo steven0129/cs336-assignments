@@ -37,6 +37,7 @@ if __name__ == '__main__':
 
     # Decode Stage
     decoder = BeamSearchDecoder(model, beam_size=5, max_length=args.max_length)
-    decoded_token_ids = decoder.decode(prompt_ids)
-    decoded_text = bpe_tokenizer.decode(decoded_token_ids.tolist())
-    print(decoded_text)
+    for decoded_token_ids in decoder.decode(prompt_ids):
+        decoded_text = bpe_tokenizer.decode(decoded_token_ids.tolist())
+        print("\033[2J\033[H", end="")
+        print(decoded_text)

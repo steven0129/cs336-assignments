@@ -34,6 +34,6 @@ class BeamSearchDecoder:
                 next_token_ids.unsqueeze(-1)
             ], dim=-1)
 
-        best_index = candidate_scores.argmax(dim=-1)
-        best_sequence = repeated_input_ids[best_index]
-        return best_sequence
+            best_index = candidate_scores.argmax(dim=-1)
+            best_sequence = repeated_input_ids[best_index]
+            yield best_sequence
