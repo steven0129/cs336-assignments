@@ -107,6 +107,17 @@ class Softmax(nn.Module):
         exp_x = x.exp()
         return exp_x / exp_x.sum(self.dim, keepdim=True)
 
+class LogSoftmax(nn.Module):
+    def __init__(self, dim=-1):
+        super(LogSoftmax, self).__init__()
+        self.dim = dim
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x_max = x.max(self.dim, keepdim=True).values
+        x = x - x_max
+        exp_x = x.exp()
+        return x - exp_x.sum(self.dim, keepdim=True).log()
+
 class ScaledDotProductAttention(nn.Module):
     def __init__(self):
         super(ScaledDotProductAttention, self).__init__()
@@ -176,6 +187,7 @@ class TransformerBlock(nn.Module):
 class TransformerLM(nn.Module):
     def __init__(self, vocab_size, context_length, num_layers, d_model, num_heads, d_ff, rope_theta=10000):
         super(TransformerLM, self).__init__()
+        self.vocab_size = vocab_size
         self.token_embeddings = Embedding(vocab_size, d_model)
         self.layers = nn.ModuleList([
             TransformerBlock(d_model, num_heads, d_ff, rope_theta, context_length) for _ in range(num_layers)

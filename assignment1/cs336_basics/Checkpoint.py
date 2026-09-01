@@ -8,4 +8,7 @@ def save_checkpoint(model, optimizer, iteration, path):
     }, path)
 
 def load_checkpoint(path):
+    if not torch.cuda.is_available():
+        return torch.load(path, map_location='cpu')
+
     return torch.load(path)
