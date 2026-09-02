@@ -4,14 +4,26 @@ from cs336_basics.Module import TransformerLM
 from cs336_basics.Tokenizer import Tokenizer
 from cs336_basics.Checkpoint import load_checkpoint
 from cs336_basics.Decoder import BeamSearchDecoder
+from huggingface_hub import snapshot_download
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--vocab-path', default='dataset')
     parser.add_argument('--prompt', default='Once upon a time there was a little boy named Ben.', type=str)
     parser.add_argument('--max-length', default=256, type=int)
     args = parser.parse_args()
+
+    snapshot_download(
+        repo_id='steven0129/TinyStoriesV2',
+        repo_type="dataset",
+        local_dir='dataset'
+    )
+
+    snapshot_download(
+        repo_id='steven0129/TinyGPT',
+        repo_type="model",
+        local_dir='logs'
+    )
 
     checkpoint = load_checkpoint('logs/model_final.pt')
     model = TransformerLM(
@@ -26,10 +38,10 @@ if __name__ == '__main__':
 
     model.load_state_dict(checkpoint['model'])
 
-    with open(f"{args.vocab_path}/vocabs.pkl", "rb") as F:
+    with open("dataset/vocabs.pkl", "rb") as F:
         vocabs = pickle.load(F)
 
-    with open(f"{args.vocab_path}/merges.pkl", "rb") as F:
+    with open("dataset/merges.pkl", "rb") as F:
         merges = pickle.load(F)
 
     bpe_tokenizer = Tokenizer(vocabs, merges, ["<|endoftext|>"])
