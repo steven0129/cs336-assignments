@@ -66,3 +66,22 @@ def test_decode_stops_when_prompt_reaches_max_length():
 
     assert list(decoder.decode([0, 1, 2])) == []
     assert model.inputs == []
+
+
+def test_decode_stops_when_best_sequence_reaches_eos_id():
+    model = DeterministicLanguageModel()
+    decoder = BeamSearchDecoder(model, eos_id=0, beam_size=2, max_length=6)
+
+    decoded_sequences = list(decoder.decode([2, 0]))
+
+    # The first generated token is returned normally. On the next step, the
+    # globally best sequence ends in EOS, so decoding stops without yielding it.
+    assert [sequence.tolist() for sequence in decoded_sequences] == [[2, 0, 1]]
+
+    # max_length would allow four decoding steps, but EOS stops the model after two.
+    assert len(model.inputs) == 2
+    assert model.inputs[0].tolist() == [[2, 0]]
+    assert {tuple(sequence) for sequence in model.inputs[1].tolist()} == {
+        (2, 0, 1),
+        (2, 0, 2),
+    }

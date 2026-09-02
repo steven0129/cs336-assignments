@@ -3,12 +3,13 @@ from cs336_basics.Module import LogSoftmax
 from einops import repeat, rearrange
 
 class BeamSearchDecoder:
-    def __init__(self, model, beam_size=5, max_length=20):
+    def __init__(self, model, eos_id=None, beam_size=5, max_length=20):
         self.model = model
         self.beam_size = beam_size
         self.max_length = max_length
         self.vocab_size = model.vocab_size
         self.log_softmax = LogSoftmax(dim=-1)
+        self.eos_id = eos_id
 
     @torch.no_grad()
     def decode(self, input_ids):
@@ -20,7 +21,6 @@ class BeamSearchDecoder:
             device=repeated_input_ids.device,
         )
 
-        # TODO: Deal with the case of EOS
         for _ in range(self.max_length - prefill_len):
             logits = self.model(repeated_input_ids)  # (beam seq vocab)
             next_log_probs = self.log_softmax(logits[:, -1, :])  # (beam vocab)
@@ -36,4 +36,6 @@ class BeamSearchDecoder:
 
             best_index = candidate_scores.argmax(dim=-1)
             best_sequence = repeated_input_ids[best_index]
+            if self.eos_id is not None and best_sequence[-1] == self.eos_id:
+                break
             yield best_sequence

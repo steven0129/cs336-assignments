@@ -35,8 +35,13 @@ if __name__ == '__main__':
     bpe_tokenizer = Tokenizer(vocabs, merges, ["<|endoftext|>"])
     prompt_ids = bpe_tokenizer.encode(args.prompt)
 
-    # Decode Stage
-    decoder = BeamSearchDecoder(model, beam_size=5, max_length=args.max_length)
+    decoder = BeamSearchDecoder(
+        model,
+        beam_size=5,
+        max_length=args.max_length,
+        eos_id=bpe_tokenizer.token2tokenid[b"<|endoftext|>"]
+    )
+
     for decoded_token_ids in decoder.decode(prompt_ids):
         decoded_text = bpe_tokenizer.decode(decoded_token_ids.tolist())
         print("\033[2J\033[H", end="")
