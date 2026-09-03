@@ -1,0 +1,20 @@
+model:
+  vocab_size: ${data.target_vocab_size}
+  context_length: 256
+  num_layers: 4
+  num_heads: 16
+  d_model: 512
+  d_ff: 1344
+  rope_theta: 10000
+
+generation:
+  prompt: Once upon a time there was a little boy named Ben.
+  beam_size: 5
+  max_length: ${model.context_length}
+  checkpoint_path: logs/model_final.pt
+  device: cpu
+  huggingface:
+    dataset_repo_id: steven0129/TinyStoriesV2
+    model_repo_id: steven0129/TinyGPT
+    dataset_local_dir: ${data.dataset_path}
+    model_local_dir: logs

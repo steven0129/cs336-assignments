@@ -1,75 +1,81 @@
-import os
-import argparse
 import pickle
+from pathlib import Path
+
 import numpy as np
-from tqdm import tqdm
 from huggingface_hub import hf_hub_download
+from tqdm import tqdm
+
+from cs336_basics.config_utils import load_config
 from cs336_basics.Tokenizer import BPETrainer, Tokenizer
 
 
-RAW_TINYSTORIES_TXT = f"TinyStoriesV2-GPT4-train.txt"
+def main():
+    config, _ = load_config("Download and tokenize a text dataset.")
+    data_config = config.data
 
+    dataset_path = Path(data_config.dataset_path)
+    dataset_path.mkdir(parents=True, exist_ok=True)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset-path', default='dataset')
-    parser.add_argument('--context-length', default=256, type=int)
-    args = parser.parse_args()
+    raw_dataset_path = dataset_path / data_config.raw_filename
+    vocab_path = dataset_path / data_config.vocab_filename
+    merges_path = dataset_path / data_config.merges_filename
+    tokenized_path = dataset_path / data_config.tokenized_filename
 
-    if not os.path.isdir(args.dataset_path):
-        os.makedirs(args.dataset_path)
-
-    if not os.path.isfile(f'{args.dataset_path}/{RAW_TINYSTORIES_TXT}'):
+    if not raw_dataset_path.is_file():
         hf_hub_download(
-            repo_id='roneneldan/TinyStories',
-            repo_type="dataset",
-            filename=RAW_TINYSTORIES_TXT,
-            local_dir=args.dataset_path
+            repo_id=data_config.huggingface.repo_id,
+            repo_type=data_config.huggingface.repo_type,
+            filename=data_config.raw_filename,
+            local_dir=dataset_path,
         )
 
-    if not os.path.isfile(f"{args.dataset_path}/vocabs.pkl") or \
-        not os.path.isfile(f"{args.dataset_path}/merges.pkl"):
+    if not vocab_path.is_file() or not merges_path.is_file():
         bpe_trainer = BPETrainer()
         print("Training BPE...")
         vocabs, merges = bpe_trainer.train(
-            f'{args.dataset_path}/{RAW_TINYSTORIES_TXT}',
-            target_vocab_size=10000,
-            special_tokens=["<|endoftext|>"]
+            raw_dataset_path,
+            target_vocab_size=data_config.target_vocab_size,
+            special_tokens=list(data_config.special_tokens),
         )
 
-        with open(f"{args.dataset_path}/vocabs.pkl", "wb") as F:
-            pickle.dump(vocabs, F)
+        with vocab_path.open("wb") as file:
+            pickle.dump(vocabs, file)
 
-        with open(f"{args.dataset_path}/merges.pkl", "wb") as F:
-            pickle.dump(merges, F)
+        with merges_path.open("wb") as file:
+            pickle.dump(merges, file)
 
-    with open(f"{args.dataset_path}/vocabs.pkl", "rb") as F:
-        vocabs = pickle.load(F)
+    with vocab_path.open("rb") as file:
+        vocabs = pickle.load(file)
 
-    with open(f"{args.dataset_path}/merges.pkl", "rb") as F:
-        merges = pickle.load(F)
+    with merges_path.open("rb") as file:
+        merges = pickle.load(file)
 
     print(f"Vocabulary Size: {len(vocabs)}")
-    bpe_tokenizer = Tokenizer(vocabs, merges, ["<|endoftext|>"])
+    special_tokens = list(data_config.special_tokens)
+    bpe_tokenizer = Tokenizer(vocabs, merges, special_tokens)
 
-    if not os.path.isfile(f"{args.dataset_path}/{RAW_TINYSTORIES_TXT}.npy"):
-        print(f"Building {args.dataset_path}/{RAW_TINYSTORIES_TXT}.npy...")
-        with open(f'{args.dataset_path}/{RAW_TINYSTORIES_TXT}') as F:
+    if not tokenized_path.is_file():
+        print(f"Building {tokenized_path}...")
+        with raw_dataset_path.open() as file:
             counter = 0
             queue = []
-            token_ids = bpe_tokenizer.encode_iterable(F, special_tokens=["<|endoftext|>"])
+            token_ids = bpe_tokenizer.encode_iterable(file, special_tokens=special_tokens)
             for token_id in tqdm(token_ids):
                 counter += 1
                 queue.append(token_id)
-                if counter == 100 * 1024 * 1024:
-                    queue = np.array(queue, dtype=np.uint16)
-                    with open(f"{args.dataset_path}/{RAW_TINYSTORIES_TXT}.npy", "ab") as F:
-                        queue.tofile(F)
+                if counter == data_config.write_buffer_size:
+                    token_buffer = np.array(queue, dtype=data_config.dtype)
+                    with tokenized_path.open("ab") as output_file:
+                        token_buffer.tofile(output_file)
 
                     queue = []
                     counter = 0
 
             if queue:
-                with open(f"{args.dataset_path}/{RAW_TINYSTORIES_TXT}.npy", "ab") as F:
-                    queue = np.array(queue, dtype=np.uint16)
-                    queue.tofile(F)
+                token_buffer = np.array(queue, dtype=data_config.dtype)
+                with tokenized_path.open("ab") as output_file:
+                    token_buffer.tofile(output_file)
+
+
+if __name__ == "__main__":
+    main()

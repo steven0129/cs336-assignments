@@ -1,0 +1,20 @@
+training:
+  seed: 42
+  batch_size: 5
+  device: cuda
+  learning_rate: 3.0e-4
+  weight_decay: 0.01
+  betas:
+    - 0.9
+    - 0.95
+  optimizer_eps: 1.0e-8
+  log_every: 10
+  save_every: 10000
+  log_dir: logs/${timestamp:}
+  wandb:
+    enabled: true
+    project: cs336-assignment1
+    entity: null
+    name: null
+    mode: online
+    tags: []
