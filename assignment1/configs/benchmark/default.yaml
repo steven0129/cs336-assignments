@@ -1,0 +1,2 @@
+num_warmup: 10000
+num_trials: 1000

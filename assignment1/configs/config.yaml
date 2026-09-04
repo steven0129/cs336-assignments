@@ -3,6 +3,7 @@ defaults:
   - model: default
   - training: default
   - generation: default
+  - benchmark: default
   - _self_
 
 hydra:
