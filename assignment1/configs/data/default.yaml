@@ -1,17 +1,16 @@
-data:
-  dataset_path: dataset
-  raw_filename: TinyStoriesV2-GPT4-train.txt
-  valid_filename: TinyStoriesV2-GPT4-valid.txt
-  tokenized_filename: ${data.raw_filename}.npy
-  valid_tokenized_filename: ${data.valid_filename}.npy
-  vocab_filename: vocabs.pkl
-  merges_filename: merges.pkl
-  dtype: uint16
-  target_vocab_size: 10000
-  special_tokens:
-    - <|endoftext|>
-  write_buffer_size: 104857600
-  huggingface:
-    repo_id: roneneldan/TinyStories
-    processed_repo_id: steven0129/TinyStoriesV2
-    repo_type: dataset
+dataset_path: dataset
+raw_filename: TinyStoriesV2-GPT4-train.txt
+valid_filename: TinyStoriesV2-GPT4-valid.txt
+tokenized_filename: ${data.raw_filename}.npy
+valid_tokenized_filename: ${data.valid_filename}.npy
+vocab_filename: vocabs.pkl
+merges_filename: merges.pkl
+dtype: uint16
+target_vocab_size: 10000
+special_tokens:
+  - <|endoftext|>
+write_buffer_size: 104857600
+huggingface:
+  repo_id: roneneldan/TinyStories
+  processed_repo_id: steven0129/TinyStoriesV2
+  repo_type: dataset

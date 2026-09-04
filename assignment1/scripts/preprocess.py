@@ -1,16 +1,17 @@
 import pickle
 from pathlib import Path
 
+import hydra
 import numpy as np
 from huggingface_hub import hf_hub_download
+from omegaconf import DictConfig
 from tqdm import tqdm
 
-from cs336_basics.config_utils import load_config
 from cs336_basics.Tokenizer import BPETrainer, Tokenizer
 
 
-def main():
-    config, _ = load_config("Download and tokenize a text dataset.")
+@hydra.main(version_base=None, config_path="../configs", config_name="config")
+def main(config: DictConfig):
     data_config = config.data
 
     dataset_path = Path(data_config.dataset_path)

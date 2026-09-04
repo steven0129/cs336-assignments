@@ -1,13 +1,13 @@
 from pathlib import Path
 
+import hydra
 import numpy as np
 import torch
+import wandb
 from huggingface_hub import snapshot_download
 from omegaconf import DictConfig, OmegaConf
 
-import wandb
 from cs336_basics.Checkpoint import save_checkpoint
-from cs336_basics.config_utils import load_config
 from cs336_basics.Data import Loader
 from cs336_basics.Module import AdamW, CrossEntropyLoss, TransformerLM
 
@@ -48,8 +48,8 @@ def initialize_wandb(config: DictConfig):
     )
 
 
-def main():
-    config, _ = load_config("Train a Transformer language model.")
+@hydra.main(version_base=None, config_path="../configs", config_name="config")
+def main(config: DictConfig):
     data_config = config.data
     model_config = config.model
     training_config = config.training

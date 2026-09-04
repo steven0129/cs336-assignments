@@ -1,0 +1,10 @@
+prompt: Once upon a time there was a little boy named Ben.
+beam_size: 5
+max_length: ${model.context_length}
+checkpoint_path: logs/model_final.pt
+device: cpu
+huggingface:
+  dataset_repo_id: steven0129/TinyStoriesV2
+  model_repo_id: steven0129/TinyGPT
+  dataset_local_dir: ${data.dataset_path}
+  model_local_dir: logs

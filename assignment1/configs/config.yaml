@@ -1,0 +1,10 @@
+defaults:
+  - data: default
+  - model: default
+  - training: default
+  - generation: default
+  - _self_
+
+hydra:
+  job:
+    chdir: false

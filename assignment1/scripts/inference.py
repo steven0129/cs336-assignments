@@ -1,17 +1,18 @@
 import pickle
 from pathlib import Path
 
+import hydra
 from huggingface_hub import snapshot_download
+from omegaconf import DictConfig
 
 from cs336_basics.Checkpoint import load_checkpoint
-from cs336_basics.config_utils import load_config
 from cs336_basics.Decoder import BeamSearchDecoder
 from cs336_basics.Module import TransformerLM
 from cs336_basics.Tokenizer import Tokenizer
 
 
-def main():
-    config, _ = load_config("Generate text with a trained Transformer language model.")
+@hydra.main(version_base=None, config_path="../configs", config_name="config")
+def main(config: DictConfig):
     data_config = config.data
     model_config = config.model
     generation_config = config.generation
