@@ -1,7 +1,9 @@
 data:
   dataset_path: dataset
   raw_filename: TinyStoriesV2-GPT4-train.txt
+  valid_filename: TinyStoriesV2-GPT4-valid.txt
   tokenized_filename: ${data.raw_filename}.npy
+  valid_tokenized_filename: ${data.valid_filename}.npy
   vocab_filename: vocabs.pkl
   merges_filename: merges.pkl
   dtype: uint16

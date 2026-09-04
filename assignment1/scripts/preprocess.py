@@ -17,9 +17,11 @@ def main():
     dataset_path.mkdir(parents=True, exist_ok=True)
 
     raw_dataset_path = dataset_path / data_config.raw_filename
+    valid_dataset_path = dataset_path / data_config.valid_filename
     vocab_path = dataset_path / data_config.vocab_filename
     merges_path = dataset_path / data_config.merges_filename
     tokenized_path = dataset_path / data_config.tokenized_filename
+    valid_tokenized_path = dataset_path / data_config.valid_tokenized_filename
 
     if not raw_dataset_path.is_file():
         hf_hub_download(
@@ -74,6 +76,28 @@ def main():
             if queue:
                 token_buffer = np.array(queue, dtype=data_config.dtype)
                 with tokenized_path.open("ab") as output_file:
+                    token_buffer.tofile(output_file)
+
+    if not valid_tokenized_path.is_file():
+        print(f"Building {valid_tokenized_path}...")
+        with valid_dataset_path.open() as file:
+            counter = 0
+            queue = []
+            token_ids = bpe_tokenizer.encode_iterable(file, special_tokens=special_tokens)
+            for token_id in tqdm(token_ids):
+                counter += 1
+                queue.append(token_id)
+                if counter == data_config.write_buffer_size:
+                    token_buffer = np.array(queue, dtype=data_config.dtype)
+                    with valid_tokenized_path.open("ab") as output_file:
+                        token_buffer.tofile(output_file)
+
+                    queue = []
+                    counter = 0
+
+            if queue:
+                token_buffer = np.array(queue, dtype=data_config.dtype)
+                with valid_tokenized_path.open("ab") as output_file:
                     token_buffer.tofile(output_file)
 
 
