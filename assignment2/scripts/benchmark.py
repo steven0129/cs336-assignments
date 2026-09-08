@@ -66,7 +66,7 @@ def main(config: DictConfig):
 
     
     mean_time = sum(times) / len(times)
-    print(f"Average inference time over {benchmark_config.steps} steps: {mean_time:.4f} ms")
+    print(f"Average inference time over {benchmark_config.num_trials} steps: {mean_time:.4f} ms")
 
 
 
