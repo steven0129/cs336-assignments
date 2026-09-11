@@ -150,12 +150,17 @@ class StaticKVCache():
 
 
     def append(self, k, v):
-        if self.ptr + 1 > self.max_seq_len:
+        if k.ndim == 3:
+            k = rearrange(k, "batch_size num_heads d_heads -> batch_size num_heads 1 d_heads")
+            v = rearrange(v, "batch_size num_heads d_heads -> batch_size num_heads 1 d_heads")
+
+        seq_len = k.shape[-2]
+        if self.ptr + seq_len > self.max_seq_len:
             raise ValueError("KV cache is full")
 
-        self.k_cached[:, :, self.ptr, :] = k
-        self.v_cached[:, :, self.ptr, :] = v
-        self.ptr += 1
+        self.k_cached[:, :, self.ptr:self.ptr + seq_len, :] = k
+        self.v_cached[:, :, self.ptr:self.ptr + seq_len, :] = v
+        self.ptr += seq_len
 
 
     def reorder(self, indices):
@@ -209,17 +214,16 @@ class CausalMultiHeadSelfAttention(nn.Module):
             attn_output = self.output_proj(attn_output)
             return attn_output
         else:
-            if seq_len != 1:
-                raise ValueError("KV-cache decoding expects one token at a time")
-
             if self.pe is not None:
-                pos = torch.tensor([len(cache)], device=x.device)
-                Q = self.pe(Q, pos)
-                K = self.pe(K, pos)
+                positions = torch.arange(len(cache), len(cache) + seq_len, device=x.device)
+                Q = self.pe(Q, positions)
+                K = self.pe(K, positions)
 
-            cache.append(K[:, :, 0, :], V[:, :, 0, :])
+            cache.append(K, V)
             k_cached, v_cached = cache.get()
-            mask = torch.ones(1, len(cache), device=x.device, dtype=torch.bool)
+            key_positions = torch.arange(len(cache), device=x.device)
+            query_positions = torch.arange(len(cache) - seq_len, len(cache), device=x.device)
+            mask = key_positions.unsqueeze(0) <= query_positions.unsqueeze(1)
             attn_output = rearrange(self.attn(Q, k_cached, v_cached, mask), "... num_heads seq_len d_heads -> ... seq_len (num_heads d_heads)", num_heads=self.num_heads)
             attn_output = self.output_proj(attn_output)
             return attn_output

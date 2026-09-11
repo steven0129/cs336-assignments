@@ -32,9 +32,7 @@ class BeamSearchDecoder:
             for _ in self.model.layers
         ]
 
-        logits = None
-        for i in range(prefill_len):
-            logits = self.model(repeated_input_ids[:, i:i + 1], caches=caches)
+        logits = self.model(repeated_input_ids, caches=caches)
 
         for _ in range(self.max_length - prefill_len):
             next_log_probs = self.log_softmax(logits[:, -1, :])  # (beam vocab)
