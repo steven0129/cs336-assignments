@@ -132,6 +132,46 @@ class ScaledDotProductAttention(nn.Module):
         QKV = einsum(QK, V, "batch_size ... seq_len_q seq_len_k, batch_size ... seq_len_k d_v -> batch_size ... seq_len_q d_v")
         return QKV
 
+
+class StaticKVCache():
+    def __init__(self, batch_size, max_seq_len, num_heads, d_heads, device, dtype):
+        self.k_cached = torch.empty(
+            batch_size, num_heads, max_seq_len, d_heads,
+            device=device, dtype=dtype
+        )
+
+        self.v_cached = torch.empty(
+            batch_size, num_heads, max_seq_len, d_heads,
+            device=device, dtype=dtype
+        )
+
+        self.max_seq_len = max_seq_len
+        self.ptr = 0
+
+
+    def append(self, k, v):
+        if self.ptr + 1 > self.max_seq_len:
+            raise ValueError("KV cache is full")
+
+        self.k_cached[:, :, self.ptr, :] = k
+        self.v_cached[:, :, self.ptr, :] = v
+        self.ptr += 1
+
+
+    def reorder(self, indices):
+        indices = indices.to(device=self.k_cached.device, dtype=torch.long)
+        self.k_cached = self.k_cached.index_select(0, indices)
+        self.v_cached = self.v_cached.index_select(0, indices)
+
+
+    def get(self):
+        return self.k_cached[:, :, :self.ptr, :], self.v_cached[:, :, :self.ptr, :]
+
+
+    def __len__(self):
+        return self.ptr
+
+
 class CausalMultiHeadSelfAttention(nn.Module):
     def __init__(self, d_model, num_heads, positional_encoding=None):
         super(CausalMultiHeadSelfAttention, self).__init__()
@@ -144,14 +184,14 @@ class CausalMultiHeadSelfAttention(nn.Module):
         if positional_encoding is not None:
             self.pe = ROPE(
                 positional_encoding["theta"],
-                d_model / num_heads,
+                d_model // num_heads,
                 positional_encoding["max_seq_len"]
             )
         else:
             self.pe = None
 
 
-    def forward(self, x):
+    def forward(self, x, cache: StaticKVCache | None = None):
         Q = self.q_proj(x)
         K = self.k_proj(x)
         V = self.v_proj(x)
@@ -159,14 +199,31 @@ class CausalMultiHeadSelfAttention(nn.Module):
         K = rearrange(K, "... seq_len (num_heads d_heads) -> ... num_heads seq_len d_heads", num_heads=self.num_heads)
         V = rearrange(V, "... seq_len (num_heads d_heads) -> ... num_heads seq_len d_heads", num_heads=self.num_heads)
         seq_len = Q.shape[-2]
-        if self.pe is not None:
-            Q = self.pe(Q, torch.arange(seq_len))
-            K = self.pe(K, torch.arange(seq_len))
-        mask = torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool).tril()
-        attn_output = rearrange(self.attn(Q, K, V, mask), "... num_heads seq_len d_heads -> ... seq_len (num_heads d_heads)", num_heads=self.num_heads)
-        attn_output = self.output_proj(attn_output)
-        return attn_output
+        if cache is None:
+            if self.pe is not None:
+                positions = torch.arange(seq_len, device=x.device)
+                Q = self.pe(Q, positions)
+                K = self.pe(K, positions)
+            mask = torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool).tril()
+            attn_output = rearrange(self.attn(Q, K, V, mask), "... num_heads seq_len d_heads -> ... seq_len (num_heads d_heads)", num_heads=self.num_heads)
+            attn_output = self.output_proj(attn_output)
+            return attn_output
+        else:
+            if seq_len != 1:
+                raise ValueError("KV-cache decoding expects one token at a time")
 
+            if self.pe is not None:
+                pos = torch.tensor([len(cache)], device=x.device)
+                Q = self.pe(Q, pos)
+                K = self.pe(K, pos)
+
+            cache.append(K[:, :, 0, :], V[:, :, 0, :])
+            k_cached, v_cached = cache.get()
+            mask = torch.ones(1, len(cache), device=x.device, dtype=torch.bool)
+            attn_output = rearrange(self.attn(Q, k_cached, v_cached, mask), "... num_heads seq_len d_heads -> ... seq_len (num_heads d_heads)", num_heads=self.num_heads)
+            attn_output = self.output_proj(attn_output)
+            return attn_output
+            
 
 class TransformerBlock(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, theta=10000, max_seq_len=2048):
@@ -179,8 +236,8 @@ class TransformerBlock(nn.Module):
         self.ln1 = RMSNorm(d_model)
         self.ln2 = RMSNorm(d_model)
 
-    def forward(self, x):
-        x = x + self.attn(self.ln1(x))
+    def forward(self, x, cache: StaticKVCache | None = None):
+        x = x + self.attn(self.ln1(x), cache=cache)
         x = x + self.ffn(self.ln2(x))
         return x
 
@@ -194,11 +251,17 @@ class TransformerLM(nn.Module):
         ])
         self.ln_final = RMSNorm(d_model)
         self.lm_head = Linear(d_model, vocab_size)
+        self.num_heads = num_heads
+        self.d_model = d_model
 
-    def forward(self, x):
+    def forward(self, x, caches: list[StaticKVCache] | None = None):
         x = self.token_embeddings(x)
-        for layer in self.layers:
-            x = layer(x)
+        if caches is not None:
+            for layer, cache in zip(self.layers, caches):
+                x = layer(x, cache=cache)
+        else:
+            for layer in self.layers:
+                x = layer(x)
         x = self.ln_final(x)
         logits = self.lm_head(x)
         return logits
