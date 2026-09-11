@@ -13,18 +13,22 @@ class BeamSearchDecoder:
 
     @torch.no_grad()
     def decode(self, input_ids):
+        model_param = next(self.model.parameters())
+        device = model_param.device
+        dtype = model_param.dtype
+
         prefill_len = len(input_ids)
-        input_ids = torch.LongTensor(input_ids)
+        input_ids = torch.LongTensor(input_ids).to(device)
         repeated_input_ids = rearrange(input_ids, 'seq -> 1 seq')
         candidate_scores = torch.zeros(
             1,
-            device=repeated_input_ids.device,
+            device=device,
         )
 
         caches = [
             StaticKVCache(1, self.max_length,
                 self.model.num_heads, self.model.d_model // self.model.num_heads,
-                device=repeated_input_ids.device, dtype=torch.float)
+                device=device, dtype=dtype)
             for _ in self.model.layers
         ]
 
