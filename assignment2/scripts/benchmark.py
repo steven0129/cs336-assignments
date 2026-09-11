@@ -38,6 +38,7 @@ def main(config: DictConfig):
 
     model = model.to(generation_config.device)
     model.eval()
+    model = torch.compile(model, fullgraph=True)
 
     print('Warming up the model...')
     with torch.no_grad():
